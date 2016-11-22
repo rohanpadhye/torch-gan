@@ -22,7 +22,7 @@ adversarial = require 'lfw_adverserial'
 ----------------------------------------------------------------------
 -- parse command-line options
 opt = lapp[[
-  -s,--save          (default "logs512_lfw64")      subdirectory to save logs
+  -s,--save          (default "logs_csp")      subdirectory to save logs
   --saveFreq         (default 1)          save every saveFreq epochs
   -n,--network       (default "")          reload pretrained network
   -p,--plot                                plot while training
@@ -33,14 +33,20 @@ opt = lapp[[
   --coefL2           (default 0)           L2 penalty on the weights
   -t,--threads       (default 4)           number of threads
   -g,--gpu           (default 0)           gpu to run on (default cpu)
-  -d,--noiseDim      (default 512)         dimensionality of noise vector
+  -d,--noiseDim      (default 8)           dimensionality of noise vector
   --K                (default 1)           number of iterations to optimize D for
   -w, --window       (default 3)           windsow id of sample image
-  --scale            (default 64)          scale of images to train on
+  --dim              (default 2)           input dimensions
 ]]
 
 
 if opt.gpu < 0 or opt.gpu > 3 then opt.gpu = false end
+
+opt.hiddenD1 = opt.hiddenD1 or 16
+opt.hiddenD2 = opt.hiddenD2 or 8
+opt.noiseDim = opt.noiseDim or 8
+opt.hiddenG1 = opt.hiddenG1 or 16
+opt.hiddenG2 = opt.hiddenG2 or 64
 
 print(opt)
 
@@ -59,7 +65,8 @@ else
   torch.setdefaulttensortype('torch.FloatTensor')
 end
 
-opt.geometry = {3, opt.scale, opt.scale}
+opt.dim = opt.dim or 2
+opt.geometry = {opt.dim, 1, 1}
 
 local input_sz = opt.geometry[1] * opt.geometry[2] * opt.geometry[3]
 
@@ -67,43 +74,32 @@ if opt.network == '' then
   ----------------------------------------------------------------------
   -- define D network to train
   model_D = nn.Sequential()
-  model_D:add(nn.SpatialConvolution(3, 32, 5, 5, 1, 1, 2, 2))
-  model_D:add(nn.SpatialMaxPooling(2,2))
+  model_D:add(nn.Reshape(input_sz))
+  model_D:add(nn.Linear(input_sz, opt.hiddenD1))
   model_D:add(nn.ReLU(true))
-  model_D:add(nn.SpatialDropout(0.2))
-  model_D:add(nn.SpatialConvolution(32, 64, 5, 5, 1, 1, 2, 2))
-  model_D:add(nn.SpatialMaxPooling(2,2))
-  model_D:add(nn.ReLU(true))
-  model_D:add(nn.SpatialDropout(0.2))
-  model_D:add(nn.SpatialConvolution(64, 96, 5, 5, 1, 1, 2, 2))
-  model_D:add(nn.ReLU(true))
-  model_D:add(nn.SpatialMaxPooling(2,2))
-  model_D:add(nn.SpatialDropout(0.2))
-  model_D:add(nn.Reshape(8*8*96))
-  model_D:add(nn.Linear(8*8*96, 1024))
+  model_D:add(nn.Linear(opt.hiddenD1, opt.hiddenD2))
   model_D:add(nn.ReLU(true))
   model_D:add(nn.Dropout())
-  model_D:add(nn.Linear(1024,1))
+  model_D:add(nn.Linear(opt.hiddenD2, 1))
   model_D:add(nn.Sigmoid())
 
-  x_input = nn.Identity()()
-  lg = nn.Linear(opt.noiseDim, 128*8*8)(x_input)
-  lg = nn.Reshape(128, 8, 8)(lg)
+  noise_input = nn.Identity()()
+  lg = nn.Linear(opt.noiseDim, opt.hiddenG1)(noise_input)
   lg = nn.ReLU(true)(lg)
-  lg = nn.SpatialUpSamplingNearest(2)(lg)
-  lg = nn.SpatialConvolution(128, 256, 5, 5, 1, 1, 2, 2)(lg)
-  lg = nn.SpatialBatchNormalization(256)(lg)
+  lg = nn.Linear(opt.hiddenG1, opt.hiddenG2)(lg)
   lg = nn.ReLU(true)(lg)
-  lg = nn.SpatialUpSamplingNearest(2)(lg)
-  lg = nn.SpatialConvolution(256, 256, 5, 5, 1, 1, 2, 2)(lg)
-  lg = nn.SpatialBatchNormalization(256)(lg)
-  lg = nn.ReLU(true)(lg)
-  lg = nn.SpatialUpSamplingNearest(2)(lg)
-  lg = nn.SpatialConvolution(256, 128, 5, 5, 1, 1, 2, 2)(lg)
-  lg = nn.SpatialBatchNormalization(128)(lg)
-  lg = nn.ReLU(true)(lg)
-  lg = nn.SpatialConvolution(128, 3, 3, 3, 1, 1, 1, 1)(lg)
-  model_G = nn.gModule({x_input}, {lg})
+  lg = nn.Linear(opt.hiddenG2, input_sz)(lg)
+  lg = nn.Tanh()(lg)
+  model_G = nn.gModule({noise_input}, {lg})
+
+  model_G = nn.Sequential()
+  model_G:add(nn.Linear(opt.noiseDim, opt.hiddenG1))
+  model_G:add(nn.ReLU(true))
+  model_G:add(nn.Linear(opt.hiddenG1, opt.hiddenG2))
+  model_G:add(nn.ReLU(true))
+  model_G:add(nn.Linear(opt.hiddenG2, input_sz))
+  model_G:add(nn.Tanh())
+  model_G:add(nn.Reshape(opt.geometry[1], opt.geometry[2], opt.geometry[3]))
 
 else
   print('<trainer> reloading previously trained network: ' .. opt.network)
@@ -125,17 +121,18 @@ print(model_D)
 print('Generator network:')
 print(model_G)
 
+-- load data
+local cspHd5 = hdf5.open('datasets/csp.h5', 'r')
+local data = cspHd5:read('csp'):all()
+cspHd5:close()
+print('Data size: ')
+print(data:size())
 
-local lfwHd5 = hdf5.open('datasets/lfw.hdf5', 'r')
-local data = lfwHd5:read('lfw'):all()
-data:mul(2):add(-1)
-lfwHd5:close()
-
-
-ntrain = 13000
-nval = 233
+ndata = data:size()[1]
+ntrain = math.floor(ndata * 0.9)
 trainData = data[{{1, ntrain}}]
-valData = data[{{ntrain, nval+ntrain}}]
+valData = data[{{ntrain+1, ndata}}]
+print(ndata .. ' samples loaded, ' .. trainData:size()[1] .. ' training and ' .. valData:size()[1] .. ' validation')
 
 
 -- this matrix records the current confusion across classes
@@ -176,19 +173,42 @@ function getSamples(dataset, N)
   -- Generate samples
   noise_inputs:normal(0, 1)
   local samples = model_G:forward(noise_inputs)
-  samples = nn.HardTanh():forward(samples)
+  samples = nn.HardTanh():forward(samples) -- FIXME: is the hardtanh() required?
   local to_plot = {}
   for i=1,N do
-    to_plot[#to_plot+1] = samples[i]:float()
+    to_plot[#to_plot+1] = samples[i]:float():reshape(opt.dim)
   end
 
   return to_plot
 end
 
+function getTrainSamples(N) 
+  local to_plot = {}
+  for i=1,N do
+    to_plot[#to_plot+1] = trainData[i]:clone():float():reshape(opt.dim)
+  end
+  return to_plot
+end
+
+	
+
+function plotSamples(samples, filename)
+	local out = assert(io.open(filename, "w"))
+	for i, x in ipairs(samples) do
+		for j = 1, (opt.dim-1) do
+			out:write(x[j] .. ", ")
+		end
+		out:write(x[opt.dim] .. "\n")
+	end
+	out:close()
+end
+
+plotSamples(getTrainSamples(50), paths.concat(opt.save, "in.csv"))
 
 -- training loop
+local k = 1
 while true do
-  local to_plot = getSamples(valData, 100)
+  local to_plot = getSamples(valData, 50)
   torch.setdefaulttensortype('torch.FloatTensor')
 
   trainLogger:style{['% mean class accuracy (train set)'] = '-'}
@@ -196,9 +216,10 @@ while true do
   trainLogger:plot()
   testLogger:plot()
 
-  local formatted = image.toDisplayTensor({input=to_plot, nrow=10})
-  formatted:float()
-  image.save(opt.save .."/lfw_example_v1_"..(epoch or 0)..'.png', formatted)
+  
+  plotSamples(to_plot, paths.concat(opt.save, "gen-"..k..".csv"))
+  k = k + 1
+
   if opt.gpu then
     torch.setdefaulttensortype('torch.CudaTensor')
   else

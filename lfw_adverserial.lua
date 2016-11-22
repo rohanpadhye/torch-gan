@@ -153,7 +153,7 @@ function adversarial.train(dataset, N)
 
   
       --print(monA:size(), tarA:size())
-      io.write("v1_lfw| R:", err_R,"  F:", err_F, "  ")
+      --io.write("v1_lfw| R:", err_R,"  F:", err_F, "  ")
       local f = criterion:forward(outputs, targets)
 
       -- backward pass 
@@ -193,15 +193,15 @@ function adversarial.train(dataset, N)
       local samples = model_G:forward(noise_inputs)
       local outputs = model_D:forward(samples)
       local f = criterion:forward(outputs, targets)
-     io.write("G:",f, " G:", tostring(sgdState_G.optimize)," D:",tostring(sgdState_D.optimize)," ", sgdState_G.numUpdates, " ", sgdState_D.numUpdates , "\n")
-      io.flush()
+     --io.write("G:",f, " G:", tostring(sgdState_G.optimize)," D:",tostring(sgdState_D.optimize)," ", sgdState_G.numUpdates, " ", sgdState_D.numUpdates , "\n")
+      --io.flush()
 
       --  backward pass
       local df_samples = criterion:backward(outputs, targets)
       model_D:backward(samples, df_samples)
       local df_do = model_D.modules[1].gradInput
       model_G:backward(noise_inputs, df_do)
-      print('gradParameters_G', gradParameters_G:norm())
+      --print('gradParameters_G', gradParameters_G:norm())
       return f,gradParameters_G
     end
 
