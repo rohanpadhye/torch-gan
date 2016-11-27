@@ -219,7 +219,7 @@ function adversarial.train(dataset, N)
       end
       targets[{{1,dataBatchSize}}]:fill(1)
       -- (1.2) Sampled data
-      noise_inputs:normal(0, 1)
+      noise_inputs:uniform(-1, 1)--normal(0, 1)
       local samples = model_G:forward(noise_inputs[{{dataBatchSize+1,opt.batchSize}}])
       for i = 1, dataBatchSize do
         inputs[k] = samples[i]:clone()
@@ -233,7 +233,7 @@ function adversarial.train(dataset, N)
 
     ----------------------------------------------------------------------
     -- (2) Update G network: maximize log(D(G(z)))
-    noise_inputs:normal(0, 1)
+    noise_inputs:uniform(-1, 1)--normal(0, 1)
     targets:fill(1)
     rmsprop(fevalG, parameters_G, sgdState_G)
 

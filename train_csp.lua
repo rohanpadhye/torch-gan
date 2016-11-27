@@ -44,9 +44,9 @@ if opt.gpu < 0 or opt.gpu > 3 then opt.gpu = false end
 
 opt.hiddenD1 = opt.hiddenD1 or 16
 opt.hiddenD2 = opt.hiddenD2 or 8
-opt.noiseDim = opt.noiseDim or 8
-opt.hiddenG1 = opt.hiddenG1 or 16
-opt.hiddenG2 = opt.hiddenG2 or 64
+opt.noiseDim = opt.noiseDim or 2
+opt.hiddenG1 = opt.hiddenG1 or 8
+opt.hiddenG2 = opt.hiddenG2 or 16
 
 print(opt)
 
@@ -171,9 +171,9 @@ function getSamples(dataset, N)
   local noise_inputs = torch.Tensor(N, opt.noiseDim)
 
   -- Generate samples
-  noise_inputs:normal(0, 1)
+  noise_inputs:uniform(-1, 1)
   local samples = model_G:forward(noise_inputs)
-  samples = nn.HardTanh():forward(samples) -- FIXME: is the hardtanh() required?
+  --samples = nn.HardTanh():forward(samples) -- FIXME: is the hardtanh() required?
   local to_plot = {}
   for i=1,N do
     to_plot[#to_plot+1] = samples[i]:float():reshape(opt.dim)
@@ -203,18 +203,18 @@ function plotSamples(samples, filename)
 	out:close()
 end
 
-plotSamples(getTrainSamples(50), paths.concat(opt.save, "in.csv"))
+plotSamples(getTrainSamples(1000), paths.concat(opt.save, "in.csv"))
 
 -- training loop
 local k = 1
 while true do
-  local to_plot = getSamples(valData, 50)
+  local to_plot = getSamples(valData, 1000)
   torch.setdefaulttensortype('torch.FloatTensor')
 
   trainLogger:style{['% mean class accuracy (train set)'] = '-'}
   testLogger:style{['% mean class accuracy (test set)'] = '-'}
-  trainLogger:plot()
-  testLogger:plot()
+  --trainLogger:plot()
+  --testLogger:plot()
 
   
   plotSamples(to_plot, paths.concat(opt.save, "gen-"..k..".csv"))
