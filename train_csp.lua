@@ -35,18 +35,17 @@ opt = lapp[[
   -g,--gpu           (default 0)           gpu to run on (default cpu)
   -d,--noiseDim      (default 8)           dimensionality of noise vector
   --K                (default 1)           number of iterations to optimize D for
-  -w, --window       (default 3)           windsow id of sample image
   --dim              (default 2)           input dimensions
 ]]
 
 
 if opt.gpu < 0 or opt.gpu > 3 then opt.gpu = false end
 
-opt.hiddenD1 = opt.hiddenD1 or 16
-opt.hiddenD2 = opt.hiddenD2 or 8
+opt.hiddenD1 = opt.hiddenD1 or 100
+opt.hiddenD2 = opt.hiddenD2 or 100
 opt.noiseDim = opt.noiseDim or 2
-opt.hiddenG1 = opt.hiddenG1 or 8
-opt.hiddenG2 = opt.hiddenG2 or 16
+opt.hiddenG1 = opt.hiddenG1 or 100
+opt.hiddenG2 = opt.hiddenG2 or 100
 
 print(opt)
 
@@ -82,15 +81,6 @@ if opt.network == '' then
   model_D:add(nn.Dropout())
   model_D:add(nn.Linear(opt.hiddenD2, 1))
   model_D:add(nn.Sigmoid())
-
-  noise_input = nn.Identity()()
-  lg = nn.Linear(opt.noiseDim, opt.hiddenG1)(noise_input)
-  lg = nn.ReLU(true)(lg)
-  lg = nn.Linear(opt.hiddenG1, opt.hiddenG2)(lg)
-  lg = nn.ReLU(true)(lg)
-  lg = nn.Linear(opt.hiddenG2, input_sz)(lg)
-  lg = nn.Tanh()(lg)
-  model_G = nn.gModule({noise_input}, {lg})
 
   model_G = nn.Sequential()
   model_G:add(nn.Linear(opt.noiseDim, opt.hiddenG1))

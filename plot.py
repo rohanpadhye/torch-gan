@@ -17,7 +17,8 @@ def main():
 			xs.append(row[0])
 			ys.append(row[1])
 	
-	plt.plot(xs, ys, 'ro')
+	style = 'bo' if csv_filename.endswith('in.csv') else 'ro'
+	plt.plot(xs, ys, style)
 	plt.title(plt_title)
 	plt.xlabel('x1')
 	plt.ylabel('x2')

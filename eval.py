@@ -3,8 +3,11 @@
 import sys
 import csv
 
-def circle(x):
-	return (x[0]**2 + x[1]**2) < 0.5
+def circle(x_1, x_2):
+	return (x_1**2 + x_2**2) < 0.5
+
+def rectangle(x_1, x_2):
+   return x_1 > 0.25 and x_1 < 0.75 and x_2 < -0.1 and x_2 > -0.8
 
 f = circle
 
@@ -16,9 +19,10 @@ def main():
 		reader = csv.reader(csv_file, delimiter=',')
 		for row in reader:
 			assert(len(row) == 2)
-			x = [float(row[0]), float(row[1])]
+			x_1 = float(row[0])
+			x_2 = float(row[1])
 			total += 1
-			if f(x):
+			if f(x_1, x_2):
 				good += 1
 
 	success = float(good)/float(total)*100.0
